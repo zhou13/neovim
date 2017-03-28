@@ -78,6 +78,7 @@
  *   update_screen() called to redraw.
  */
 
+
 #include <assert.h>
 #include <inttypes.h>
 #include <stdbool.h>
@@ -2785,12 +2786,6 @@ win_line (
         if (wp->w_p_bri && n_extra == 0 && row != startrow && filler_lines == 0) {
           char_attr = 0; // was: hl_attr(HLF_AT);
 
-          if (diff_hlf != (hlf_T)0) {
-            char_attr = hl_attr(diff_hlf);
-            if (wp->w_p_cul && lnum == wp->w_cursor.lnum) {
-              char_attr = hl_combine_attr(char_attr, hl_attr(HLF_CUL));
-            }
-          }
           p_extra = NULL;
           c_extra = ' ';
           n_extra = get_breakindent_win(wp, ml_get_buf(wp->w_buffer, lnum, FALSE));
@@ -2828,9 +2823,6 @@ win_line (
           if (tocol == vcol)
             tocol += n_extra;
           /* combine 'showbreak' with 'cursorline' */
-          if (wp->w_p_cul && lnum == wp->w_cursor.lnum) {
-            char_attr = hl_combine_attr(char_attr, hl_attr(HLF_CUL));
-          }
         }
       }
 
@@ -2998,16 +2990,16 @@ win_line (
       attr_pri = true;
 
       if (area_attr != 0) {
-        char_attr = hl_combine_attr(line_attr, area_attr);
+        char_attr = area_attr;
       } else if (search_attr != 0) {
-        char_attr = hl_combine_attr(line_attr, search_attr);
+        char_attr = search_attr;
       }
       // Use line_attr when not in the Visual or 'incsearch' area
       // (area_attr may be 0 when "noinvcur" is set).
       else if (line_attr != 0 && ((fromcol == -10 && tocol == MAXCOL)
                                   || vcol < fromcol || vcol_prev < fromcol_prev
                                   || vcol >= tocol))
-        char_attr = line_attr;
+        char_attr = 0;
       else {
         attr_pri = FALSE;
         if (has_syntax)
@@ -3976,12 +3968,15 @@ win_line (
       if (wp->w_p_cuc && VCOL_HLC == (long)wp->w_virtcol
           && lnum != wp->w_cursor.lnum) {
         vcol_save_attr = char_attr;
-        char_attr = hl_combine_attr(char_attr, hl_attr(HLF_CUC));
+        char_attr = hl_combine_attr(hl_attr(HLF_CUC), char_attr);
       } else if (draw_color_col && VCOL_HLC == *color_cols) {
         vcol_save_attr = char_attr;
-        char_attr = hl_combine_attr(char_attr, hl_attr(HLF_MC));
+        char_attr = hl_combine_attr(hl_attr(HLF_MC), char_attr);
       }
     }
+
+    // apply line attr with lowest priority so that everthing can override it
+    char_attr = hl_combine_attr(line_attr, char_attr);
 
     /*
      * Store character to be displayed.
