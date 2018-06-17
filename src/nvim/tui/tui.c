@@ -106,6 +106,7 @@ typedef struct {
     int enable_lr_margin, disable_lr_margin;
     int set_rgb_foreground, set_rgb_background;
     int set_cursor_color;
+    int reset_cursor_color;
     int enable_focus_reporting, disable_focus_reporting;
     int resize_screen;
     int reset_scroll_region;
@@ -185,6 +186,7 @@ static void terminfo_start(UI *ui)
   data->unibi_ext.enable_mouse = -1;
   data->unibi_ext.disable_mouse = -1;
   data->unibi_ext.set_cursor_color = -1;
+  data->unibi_ext.reset_cursor_color = -1;
   data->unibi_ext.enable_bracketed_paste = -1;
   data->unibi_ext.disable_bracketed_paste = -1;
   data->unibi_ext.enable_lr_margin = -1;
@@ -929,12 +931,25 @@ static void tui_set_mode(UI *ui, ModeShape mode)
   TUIData *data = ui->data;
   cursorentry_T c = data->cursor_shapes[mode];
 
-  if (c.id != 0 && ui->rgb) {
-    int attr = syn_id2attr(c.id);
-    if (attr > 0) {
-      HlAttrs *aep = syn_cterm_attr2entry(attr);
-      UNIBI_SET_NUM_VAR(data->params[0], aep->rgb_bg_color);
-      unibi_out_ext(ui, data->unibi_ext.set_cursor_color);
+  if (ui->rgb) {
+    if (c.id != 0) {
+      int attr = syn_id2attr(c.id);
+      if (attr > 0) {
+        HlAttrs *aep = syn_cterm_attr2entry(attr);
+        if (aep->rgb_ae_attr & HL_INVERSE) {
+          // We reset the cursor color to the default because AFAIK it is
+          // impossible to directly set cursor color to inverse.  Hopefully the
+          // user's default cursor color is inverse.
+          unibi_out_ext(ui, data->unibi_ext.reset_cursor_color);
+        } else {
+          UNIBI_SET_NUM_VAR(data->params[0], aep->rgb_bg_color);
+          unibi_out_ext(ui, data->unibi_ext.set_cursor_color);
+        }
+      }
+    } else {
+      // Reset the cursor color to default if the user does not specify cursor
+      // color.
+      unibi_out_ext(ui, data->unibi_ext.reset_cursor_color);
     }
   }
 
@@ -1717,8 +1732,10 @@ static void augment_terminfo(TUIData *data, const char *term,
     // This seems to be supported for a long time in VTE
     // urxvt also supports this
     data->unibi_ext.set_cursor_color = (int)unibi_add_ext_str(
-        ut, NULL, "\033]12;#%p1%06x\007");
+        ut, "ext.set_cursor_color", "\033]12;#%p1%06x\007");
   }
+  data->unibi_ext.reset_cursor_color = (int)unibi_add_ext_str(
+      ut, "ext.reset_cursor_color", "\x1b]112\x07");
 
   /// Terminals usually ignore unrecognized private modes, and there is no
   /// known ambiguity with these. So we just set them unconditionally.
